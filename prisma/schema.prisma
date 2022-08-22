@@ -1,0 +1,32 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model SlackInstallation {
+  id Int @id @default(autoincrement())
+  team_id String? @unique
+  team_name String?
+  user_token String?
+  user_scopes String?
+  user_id String?
+  token_type String?
+  enterprise_id String? @unique
+  enterprise_name String?
+  enterprise_url String?
+  is_enterprise_install Boolean?
+  app_id String?
+  auth_version String?
+  bot_id String?
+  bot_scopes String?
+  bot_token String?
+  bot_user_id String?
+}
