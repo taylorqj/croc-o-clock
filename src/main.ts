@@ -103,50 +103,54 @@ receiver.router.get("/ping", async (req: any, res: any) => {
   res.json({ ping: "pong" });
 });
 
-receiver.router.post("/sms", twilio.webhook(), async (req: any, res: any) => {
-  const { body } = req;
+receiver.router.post(
+  "/sms",
+  twilio.webhook({ protocol: "https" }),
+  async (req: any, res: any) => {
+    const { body } = req;
 
-  console.log("Received text message from Twilio. It's croc-o-clock!");
+    console.log("Received text message from Twilio. It's croc-o-clock!");
 
-  try {
-    const installations = await prisma.slackInstallation.findMany();
+    try {
+      const installations = await prisma.slackInstallation.findMany();
 
-    installations.forEach(async (installation) => {
-      const slackMessage = createMessage({
-        text: body.Body,
-        image: body.MediaUrl0,
+      installations.forEach(async (installation) => {
+        const slackMessage = createMessage({
+          text: body.Body,
+          image: body.MediaUrl0,
+        });
+
+        const channelReq = await app.client.conversations.list({
+          token: installation.bot_token ?? undefined,
+        });
+
+        const filteredChannels = channelReq?.channels?.filter(
+          (channel) => channel.is_channel && channel.is_member
+        );
+
+        filteredChannels?.forEach(async (channel) => {
+          if (channel.id) {
+            await app.client.chat.postMessage({
+              token: installation.bot_token ?? undefined,
+              channel: channel.id,
+              blocks: slackMessage,
+              text: "A croc has dropped but we forgot to load the details..",
+            });
+
+            console.log(
+              `Sent message to workspace: ${installation.id} channel: ${channel.id}`
+            );
+          }
+        });
       });
+    } catch (e) {
+      console.error(e);
+      res.error({ error: e });
+    }
 
-      const channelReq = await app.client.conversations.list({
-        token: installation.bot_token ?? undefined,
-      });
-
-      const filteredChannels = channelReq?.channels?.filter(
-        (channel) => channel.is_channel && channel.is_member
-      );
-
-      filteredChannels?.forEach(async (channel) => {
-        if (channel.id) {
-          await app.client.chat.postMessage({
-            token: installation.bot_token ?? undefined,
-            channel: channel.id,
-            blocks: slackMessage,
-            text: "A croc has dropped but we forgot to load the details..",
-          });
-
-          console.log(
-            `Sent message to workspace: ${installation.id} channel: ${channel.id}`
-          );
-        }
-      });
-    });
-  } catch (e) {
-    console.error(e);
-    res.error({ error: e });
+    res.json({ success: true });
   }
-
-  res.json({ success: true });
-});
+);
 
 (async () => {
   await app.start(process.env.PORT || 9090);
