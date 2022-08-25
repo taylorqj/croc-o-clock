@@ -98,6 +98,10 @@ const app = new App({ receiver });
 
 receiver.router.use(bodyParser.urlencoded({ extended: false }));
 
+receiver.router.get("/ping", async (req: any, res: any) => {
+  res.json({ ping: "pong" });
+});
+
 receiver.router.post("/sms", async (req: any, res: any) => {
   const { body } = req;
 
