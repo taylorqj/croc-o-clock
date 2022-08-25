@@ -5,6 +5,7 @@ import bodyParser from "body-parser";
 import { App, ExpressReceiver } from "@slack/bolt";
 import { PrismaClient } from "@prisma/client";
 import SlackInstallationRepository from "./repositories/slackInstallationRepository";
+import twilio from "twilio";
 
 const prisma = new PrismaClient();
 
@@ -102,7 +103,7 @@ receiver.router.get("/ping", async (req: any, res: any) => {
   res.json({ ping: "pong" });
 });
 
-receiver.router.post("/sms", async (req: any, res: any) => {
+receiver.router.post("/sms", twilio.webhook(), async (req: any, res: any) => {
   const { body } = req;
 
   console.log("Received text message from Twilio. It's croc-o-clock!");
