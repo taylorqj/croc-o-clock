@@ -148,7 +148,7 @@ receiver.router.post("/sms", async (req: any, res: any) => {
 });
 
 (async () => {
-  await app.start(9090);
+  await app.start(process.env.PORT || 9090);
 
   console.log("⚡️ Croc O'Clock app started");
 })();
