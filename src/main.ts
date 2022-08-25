@@ -1,113 +1,85 @@
-require('dotenv').config()
+require("dotenv").config();
 
 import { createMessage } from "./slack/templates/textWithImageTemplate";
-import bodyParser from 'body-parser';
+import bodyParser from "body-parser";
 import { App, ExpressReceiver } from "@slack/bolt";
 import { PrismaClient } from "@prisma/client";
+import SlackInstallationRepository from "./repositories/slackInstallationRepository";
 
 const prisma = new PrismaClient();
+
+const slackInstallationRepository = new SlackInstallationRepository(prisma);
 
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET ?? "",
   clientId: process.env.SLACK_CLIENT_ID,
   clientSecret: process.env.SLACK_CLIENT_SECRET,
-  stateSecret: 'my-super-secret',
-  scopes: ['chat:write', 'channels:join', "channels:read"],
-  //installationStore: new FileInstallationStore(),
+  stateSecret: "my-super-secret",
+  scopes: ["chat:write", "channels:join", "channels:read"],
   installationStore: {
-    storeInstallation: async (installation) => {
+    storeInstallation: async (installation): Promise<void> => {
       try {
-        const whereCondition = installation.isEnterpriseInstall && installation.enterprise !== undefined 
-          ? { enterprise_id: installation.enterprise.id }
-          : { team_id: installation.team?.id }
+        const whereCondition =
+          installation.isEnterpriseInstall &&
+          installation.enterprise?.id !== undefined
+            ? { enterprise_id: installation.enterprise?.id }
+            : { team_id: installation.team?.id };
 
-        const existingRecord = await prisma.slackInstallation.findFirst({
-          where: whereCondition,
-        });
+        const existingRecord = await slackInstallationRepository.findByAny(
+          whereCondition
+        );
 
         if (existingRecord) {
-          console.log("Existing installation record found, updating.");
-          await prisma.slackInstallation.update({
-            where: {
-              id: existingRecord.id,
-            },
-            data: {
-              team_id: installation.team?.id,
-              team_name: installation.team?.name,
-              user_token: installation.user.token,
-              user_scopes: installation.user.scopes?.toString(),
-              user_id: installation.user.id,
-              token_type: installation.tokenType,
-              enterprise_id: installation.enterprise?.id,
-              enterprise_name: installation.enterprise?.name,
-              is_enterprise_install: installation.isEnterpriseInstall,
-              app_id: installation.appId,
-              auth_version: installation.authVersion,
-              bot_id: installation.bot?.id,
-              bot_scopes: installation.bot?.scopes.toString(),
-              bot_token: installation.bot?.token,
-              bot_user_id: installation.bot?.userId,
-            },
-          });
+          await slackInstallationRepository.update(
+            installation,
+            existingRecord.id
+          );
 
           return;
         }
 
-        console.log("New installation detected. Creating.");
-        await prisma.slackInstallation.create({
-          data: {
-              team_id: installation.team?.id,
-              team_name: installation.team?.name,
-              user_token: installation.user.token,
-              user_scopes: installation.user.scopes?.toString(),
-              user_id: installation.user.id,
-              token_type: installation.tokenType,
-              enterprise_id: installation.enterprise?.id,
-              enterprise_name: installation.enterprise?.name,
-              is_enterprise_install: installation.isEnterpriseInstall,
-              app_id: installation.appId,
-              auth_version: installation.authVersion,
-              bot_id: installation.bot?.id,
-              bot_scopes: installation.bot?.scopes.toString(),
-              bot_token: installation.bot?.token,
-              bot_user_id: installation.bot?.userId,
-          },
-        });
+        await slackInstallationRepository.create(installation);
       } catch (e) {
         console.error(e);
+
         throw new Error("Failed saving installation data");
       }
     },
     fetchInstallation: async (installQuery): Promise<any> => {
       try {
-        const whereCondition = installQuery.isEnterpriseInstall && installQuery.enterpriseId !== undefined
-          ? { enterprise_id: installQuery.enterpriseId }
-          : { team_id: installQuery.teamId };
+        const whereCondition =
+          installQuery.isEnterpriseInstall &&
+          installQuery.enterpriseId !== undefined
+            ? { enterprise_id: installQuery.enterpriseId }
+            : { team_id: installQuery.teamId };
 
-        const record = await prisma.slackInstallation.findFirst({
-          where: whereCondition,
-        });
+        const installation = await slackInstallationRepository.findByAny(
+          whereCondition
+        );
 
-        return record;
+        return installation;
       } catch (e) {
         console.error(e);
+
         throw new Error("Failed fetching installation data");
       }
     },
     deleteInstallation: async (installQuery) => {
       try {
-        const whereCondition = installQuery.isEnterpriseInstall && installQuery.enterpriseId !== undefined
-          ? { enterprise_id: installQuery.enterpriseId }
-          : { team_id: installQuery.teamId };
+        const whereCondition =
+          installQuery.isEnterpriseInstall &&
+          installQuery.enterpriseId !== undefined
+            ? { enterprise_id: installQuery.enterpriseId }
+            : { team_id: installQuery.teamId };
 
-        const existingRecord = await prisma.slackInstallation.findFirst({
-          where: whereCondition,
-        });
+        const installation = await slackInstallationRepository.findByAny(
+          whereCondition
+        );
 
-        if (existingRecord) {
+        if (installation) {
           await prisma.slackInstallation.delete({
             where: {
-              id: existingRecord.id,
+              id: installation.id,
             },
           });
         }
@@ -122,12 +94,11 @@ const receiver = new ExpressReceiver({
   },
 });
 
+const app = new App({ receiver });
 
-const app = new App({receiver});
+receiver.router.use(bodyParser.urlencoded({ extended: false }));
 
-receiver.router.use(bodyParser.urlencoded({ extended: false}));
-
-receiver.router.post('/sms', async (req: any, res: any) => {
+receiver.router.post("/sms", async (req: any, res: any) => {
   const { body } = req;
 
   console.log("Received text message from Twilio. It's croc-o-clock!");
@@ -135,7 +106,7 @@ receiver.router.post('/sms', async (req: any, res: any) => {
   try {
     const installations = await prisma.slackInstallation.findMany();
 
-    installations.forEach(async installation => {
+    installations.forEach(async (installation) => {
       const slackMessage = createMessage({
         text: body.Body,
         image: body.MediaUrl0,
@@ -145,9 +116,11 @@ receiver.router.post('/sms', async (req: any, res: any) => {
         token: installation.bot_token ?? undefined,
       });
 
-      const filteredChannels = channelReq?.channels?.filter(channel => channel.is_channel && channel.is_member);
+      const filteredChannels = channelReq?.channels?.filter(
+        (channel) => channel.is_channel && channel.is_member
+      );
 
-      filteredChannels?.forEach(async channel => {
+      filteredChannels?.forEach(async (channel) => {
         if (channel.id) {
           await app.client.chat.postMessage({
             token: installation.bot_token ?? undefined,
@@ -156,14 +129,15 @@ receiver.router.post('/sms', async (req: any, res: any) => {
             text: "A croc has dropped but we forgot to load the details..",
           });
 
-          console.log(`Sent message to workspace: ${installation.id} channel: ${channel.id}`)
+          console.log(
+            `Sent message to workspace: ${installation.id} channel: ${channel.id}`
+          );
         }
       });
     });
   } catch (e) {
-    console.error("Something happened trying to send messages to slack.")
-    console.error(e)
-    res.error({ success: false });
+    console.error(e);
+    res.error({ error: e });
   }
 
   res.json({ success: true });
@@ -171,5 +145,6 @@ receiver.router.post('/sms', async (req: any, res: any) => {
 
 (async () => {
   await app.start(9090);
-  console.log('⚡️ Bolt app started');
+
+  console.log("⚡️ Croc O'Clock app started");
 })();
