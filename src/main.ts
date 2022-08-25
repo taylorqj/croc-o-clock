@@ -14,7 +14,7 @@ const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET ?? "",
   clientId: process.env.SLACK_CLIENT_ID,
   clientSecret: process.env.SLACK_CLIENT_SECRET,
-  stateSecret: "my-super-secret",
+  stateSecret: process.env.SLACK_STATE_SECRET,
   scopes: ["chat:write", "channels:join", "channels:read"],
   installationStore: {
     storeInstallation: async (installation): Promise<void> => {
